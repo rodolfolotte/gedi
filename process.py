@@ -1,17 +1,36 @@
 import os
 import h5py
-import numpy as np
 import pandas as pd
 import geopandas as gp
 import holoviews as hv
 import geoviews as gv
 
 from shapely.geometry import Point
-from geoviews import opts, tile_sources as gvts
-gv.extension('bokeh', 'matplotlib')
+from geoviews import opts
+from geoviews import tile_sources as gvts
+
+gv.extension('bokeh', 'matplotlib', display_formats=['svg', 'html'])
+gv.output(fig='png')
+
+
+def point_visual(features, vdims):
+    """
+    :param features:
+    :param vdims:
+    :return:
+    """
+    return (gvts.EsriImagery * gv.Points(features, vdims=vdims).options(tools=['hover'], height=500, width=900, size=5,
+                                                                        color='yellow',
+                                                                        fontsize={'xticks': 10, 'yticks': 10,
+                                                                                  'xlabel': 16, 'ylabel': 16}))
 
 
 def open_sds(gedi_data, beam_name):
+    """
+    :param gedi_data:
+    :param beam_name:
+    :return:
+    """
     lon_sample = []
     lat_sample = []
     shot_sample = []
@@ -36,24 +55,28 @@ def open_sds(gedi_data, beam_name):
     latslons['geometry'] = latslons.apply(lambda row: Point(row.Longitude, row.Latitude), axis=1)
     latslons = gp.GeoDataFrame(latslons)
     latslons = latslons.drop(columns=['Latitude', 'Longitude'])
-    # latslons['geometry'][0]
 
     del beam_sample, quality, quality_sample, lat_sample, lats, lon_sample, lons, shot_sample, shots
+
+    return latslons
 
 
 def get_data(path):
     """
     :return:
     """
+    redwood_np = gp.GeoDataFrame.from_file('data/RedwoodNP.geojson')
     gedi_files = [g for g in os.listdir(path) if g.startswith('GEDI02_A') and g.endswith('.h5')]
 
     for item in gedi_files:
         path_to_file = os.path.join(path, item)
         gedi_l2a = h5py.File(path_to_file, 'r')
-
-        list(gedi_l2a.keys())
-        for g in gedi_l2a['METADATA']['DatasetIdentification'].attrs:
-            print(g)
-
         beam_names = [g for g in gedi_l2a.keys() if g.startswith('BEAM')]
-        open_sds(gedi_l2a, beam_names[0])
+        latslons = open_sds(gedi_l2a, beam_names[0])
+
+        vdims = []
+        for f in latslons:
+            if f not in ['geometry']:
+                vdims.append(f)
+
+        gv.Polygons(redwood_np).opts(tools=['hover'], line_color='red', color=None) * point_visual(latslons, vdims=vdims)
